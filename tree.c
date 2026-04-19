@@ -156,6 +156,23 @@ static int write_tree_recursive(IndexEntry *entries, int count, int prefix_len, 
                     break;
                 }
             }
+                        // Recursively build the subtree for entries[i..j-1]
+            ObjectID sub_id;
+            int new_prefix = prefix_len + (int)dir_name_len + 1; // +1 for the '/'
+            if (write_tree_recursive(entries + i, j - i, new_prefix, &sub_id) != 0) {
+                return -1;
+            }
+ 
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = MODE_DIR;
+            strncpy(te->name, dir_name, sizeof(te->name) - 1);
+            te->name[sizeof(te->name) - 1] = '\0';
+            te->hash = sub_id;
+ 
+            i = j;
+        }
+    }
+ 
 int tree_from_index(ObjectID *id_out) {
         Index index;
     index.count = 0;
