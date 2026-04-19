@@ -196,4 +196,20 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     commit.timestamp = (uint64_t)time(NULL);
     strncpy(commit.author, pes_author(), sizeof(commit.author) - 1);
     strncpy(commit.message, message, sizeof(commit.message) - 1);
+    // 3. Read current HEAD as parent (may not exist for first commit)
+        ObjectID parent_id;
+        if (head_read(&parent_id) == 0) {
+            commit.has_parent = 1;
+            commit.parent = parent_id;
+        } else {
+            commit.has_parent = 0;
+        }
+     
+        // 4. Serialize the commit to text
+        void *commit_data;
+        size_t commit_len;
+        if (commit_serialize(&commit, &commit_data, &commit_len) != 0) {
+            return -1;
+        }
+     
 }
