@@ -116,19 +116,46 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 
 // ─── TODO: Implement these ──────────────────────────────────────────────────
 
-// Build a tree hierarchy from the current index and write all tree
-// objects to the object store.
+// Recursive helper: given a slice of index entries that all share the same
+// directory prefix (prefix_len chars), build a tree object and return its hash.
 //
-// HINTS - Useful functions and concepts for this phase:
-//   - index_load      : load the staged files into memory
-//   - strchr          : find the first '/' in a path to separate directories from files
-//   - strncmp         : compare prefixes to group files belonging to the same subdirectory
-//   - Recursion       : you will likely want to create a recursive helper function 
-//                       (e.g., `write_tree_level(entries, count, depth)`) to handle nested dirs.
-//   - tree_serialize  : convert your populated Tree struct into a binary buffer
-//   - object_write    : save that binary buffer to the store as OBJ_TREE
-//
-// Returns 0 on success, -1 on error.
+// entries[0..count-1] are all paths with a common prefix of prefix_len chars.
+// At the top level prefix_len == 0 (root).
+static int write_tree_recursive(IndexEntry *entries, int count, int prefix_len, ObjectID *id_out) {
+    Tree tree;
+    tree.count = 0;
+ 
+    int i = 0;
+    while (i < count) {
+        const char *rel = entries[i].path + prefix_len; // path relative to this level
+ 
+        char *slash = strchr(rel, '/');
+        if (!slash) {
+            // Direct file entry at this level
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = entries[i].mode;
+            strncpy(te->name, rel, sizeof(te->name) - 1);
+            te->name[sizeof(te->name) - 1] = '\0';
+            te->hash = entries[i].hash;
+            i++;
+        } else {
+            // Subdirectory: find all entries sharing the same first component
+            size_t dir_name_len = (size_t)(slash - rel);
+            char dir_name[256];
+            if (dir_name_len >= sizeof(dir_name)) return -1;
+            memcpy(dir_name, rel, dir_name_len);
+            dir_name[dir_name_len] = '\0';
+ 
+            // Count how many entries belong to this subdirectory
+            int j = i;
+            while (j < count) {
+                const char *r = entries[j].path + prefix_len;
+                if (strncmp(r, dir_name, dir_name_len) == 0 && r[dir_name_len] == '/') {
+                    j++;
+                } else {
+                    break;
+                }
+            }
 int tree_from_index(ObjectID *id_out) {
         Index index;
     index.count = 0;
