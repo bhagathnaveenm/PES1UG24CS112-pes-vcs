@@ -83,7 +83,16 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     memcpy(full, header, (size_t)header_len);
     full[header_len] = '\0';
     memcpy(full + header_len + 1, data, len);
+     // 2. Compute SHA-256 of the full object (header + '\0' + data)
+    ObjectID id;
+    compute_hash(full, full_len, &id);
  
+    // 3. Deduplication — if object already exists, skip writing
+    if (object_exists(&id)) {
+        free(full);
+        *id_out = id;
+        return 0;
+    }
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
     // TODO: Implement
