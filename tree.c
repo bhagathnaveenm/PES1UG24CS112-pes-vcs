@@ -172,7 +172,20 @@ static int write_tree_recursive(IndexEntry *entries, int count, int prefix_len, 
             i = j;
         }
     }
+    // Serialize the tree and write it to the object store
+    void *tree_data;
+    size_t tree_len;
+    if (tree_serialize(&tree, &tree_data, &tree_len) != 0) return -1;
  
+    int rc = object_write(OBJ_TREE, tree_data, tree_len, id_out);
+    free(tree_data);
+    return rc;
+}
+ 
+// Comparator for sorting index entries by path (needed for recursive grouping)
+static int compare_index_entries_by_path(const void *a, const void *b) {
+    return strcmp(((const IndexEntry *)a)->path, ((const IndexEntry *)b)->path);
+}
 int tree_from_index(ObjectID *id_out) {
         Index index;
     index.count = 0;
@@ -192,4 +205,7 @@ int tree_from_index(ObjectID *id_out) {
  
     // Sort entries by path so subdirectory grouping works correctly
     qsort(index.entries, (size_t)index.count, sizeof(IndexEntry), compare_index_entries_by_path);
-}
+    sizeof(IndexEntry), compare_index_entries_by_path);
+     
+        return write_tree_recursive(index.entries, index.count, 0, id_out);
+    }
