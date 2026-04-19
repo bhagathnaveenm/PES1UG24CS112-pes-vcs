@@ -232,4 +232,36 @@ int index_add(Index *index, const char *path) {
         return -1;
     }
     free(contents);
+        // Get file metadata
+    struct stat st;
+    if (lstat(path, &st) != 0) return -1;
+ 
+    uint32_t mode;
+    if (S_ISDIR(st.st_mode))          mode = 0040000;
+    else if (st.st_mode & S_IXUSR)    mode = 0100755;
+    else                               mode = 0100644;
+ 
+    // Update or insert index entry
+    IndexEntry *existing = index_find(index, path);
+    if (existing) {
+        existing->hash     = blob_id;
+        existing->mtime_sec = (uint64_t)st.st_mtime;
+        existing->size     = (uint32_t)st.st_size;
+        existing->mode     = mode;
+    } else {
+        if (index->count >= MAX_INDEX_ENTRIES) {
+            fprintf(stderr, "error: index is full\n");
+            return -1;
+        }
+        IndexEntry *e = &index->entries[index->count++];
+        e->hash      = blob_id;
+        e->mtime_sec = (uint64_t)st.st_mtime;
+        e->size      = (uint32_t)st.st_size;
+        e->mode      = mode;
+        strncpy(e->path, path, sizeof(e->path) - 1);
+        e->path[sizeof(e->path) - 1] = '\0';
+    }
+ 
+    return index_save(index);
 }
+
