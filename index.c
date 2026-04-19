@@ -125,15 +125,6 @@ int index_status(const Index *index) {
     return 0;
 }
 
-// ─── TODO: Implement these ───────────────────────────────────────────────────
-
-// Load the index from .pes/index.
-//
-// HINTS - Useful functions:
-//   - fopen (with "r"), fscanf, fclose : reading the text file line by line
-//   - hex_to_hash                      : converting the parsed string to ObjectID
-//
-// Returns 0 on success, -1 on error.
 int index_load(Index *index) {
         index->count = 0;
      
@@ -208,18 +199,37 @@ int index_save(const Index *index) {
     return rename(tmp_path, INDEX_FILE);
 }
 
-// Stage a file for the next commit.
-//
-// HINTS - Useful functions and syscalls:
-//   - fopen, fread, fclose             : reading the target file's contents
-//   - object_write                     : saving the contents as OBJ_BLOB
-//   - stat / lstat                     : getting file metadata (size, mtime, mode)
-//   - index_find                       : checking if the file is already staged
-//
-// Returns 0 on success, -1 on error.
+
 int index_add(Index *index, const char *path) {
-    // TODO: Implement file staging
-    // (See Lab Appendix for logical steps)
-    (void)index; (void)path;
-    return -1;
+    // Read the file contents
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "error: cannot open '%s'\n", path);
+        return -1;
+    }
+ 
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+ 
+    if (file_size < 0) { fclose(f); return -1; }
+ 
+    uint8_t *contents = malloc((size_t)file_size + 1);
+    if (!contents) { fclose(f); return -1; }
+ 
+    size_t read_bytes = fread(contents, 1, (size_t)file_size, f);
+    fclose(f);
+ 
+    if (read_bytes != (size_t)file_size) {
+        free(contents);
+        return -1;
+    }
+ 
+    // Write as a blob object
+    ObjectID blob_id;
+    if (object_write(OBJ_BLOB, contents, (size_t)file_size, &blob_id) != 0) {
+        free(contents);
+        return -1;
+    }
+    free(contents);
 }
