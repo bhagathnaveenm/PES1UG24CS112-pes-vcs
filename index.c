@@ -177,21 +177,35 @@ int index_load(Index *index) {
     return 0;
 }
 
-// Save the index to .pes/index atomically.
-//
-// HINTS - Useful functions and syscalls:
-//   - qsort                            : sorting the entries array by path
-//   - fopen (with "w"), fprintf        : writing to the temporary file
-//   - hash_to_hex                      : converting ObjectID for text output
-//   - fflush, fileno, fsync, fclose    : flushing userspace buffers and syncing to disk
-//   - rename                           : atomically moving the temp file over the old index
-//
-// Returns 0 on success, -1 on error.
+// Comparator for sorting index entries by path
+static int compare_entries_by_path(const void *a, const void *b) {
+    return strcmp(((const IndexEntry *)a)->path, ((const IndexEntry *)b)->path);
+}
+ 
 int index_save(const Index *index) {
-    // TODO: Implement atomic index saving
-    // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+    char tmp_path[] = INDEX_FILE ".tmp";
+ 
+    FILE *f = fopen(tmp_path, "w");
+    if (!f) return -1;
+ 
+    // Sort a copy before writing
+    Index sorted = *index;
+    qsort(sorted.entries, (size_t)sorted.count, sizeof(IndexEntry), compare_entries_by_path);
+ 
+    for (int i = 0; i < sorted.count; i++) {
+        const IndexEntry *e = &sorted.entries[i];
+        char hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&e->hash, hex);
+ 
+        fprintf(f, "%o %s %" PRIu64 " %u %s\n",
+                e->mode, hex, e->mtime_sec, e->size, e->path);
+    }
+ 
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+ 
+    return rename(tmp_path, INDEX_FILE);
 }
 
 // Stage a file for the next commit.
