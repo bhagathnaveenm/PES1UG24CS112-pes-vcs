@@ -93,6 +93,54 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         *id_out = id;
         return 0;
     }
+        // 4. Build paths
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(&id, hex);
+ 
+    char shard_dir[512];
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+ 
+    char final_path[512];
+    snprintf(final_path, sizeof(final_path), "%s/%.2s/%s", OBJECTS_DIR, hex, hex + 2);
+ 
+    char tmp_path[512];
+    snprintf(tmp_path, sizeof(tmp_path), "%s/%.2s/%s.tmp", OBJECTS_DIR, hex, hex + 2);
+ 
+    // 5. Create shard directory if needed
+    mkdir(shard_dir, 0755); // OK if it already exists
+ 
+    // 6. Write to temp file
+    int fd = open(tmp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) { free(full); return -1; }
+ 
+    ssize_t written = write(fd, full, full_len);
+    free(full);
+    if (written < 0 || (size_t)written != full_len) {
+        close(fd);
+        unlink(tmp_path);
+        return -1;
+    }
+ 
+    // 7. fsync the temp file
+    fsync(fd);
+    close(fd);
+ 
+    // 8. Atomically rename temp → final
+    if (rename(tmp_path, final_path) != 0) {
+        unlink(tmp_path);
+        return -1;
+    }
+ 
+    // 9. fsync the shard directory to persist the rename
+    int dir_fd = open(shard_dir, O_RDONLY);
+    if (dir_fd >= 0) {
+        fsync(dir_fd);
+        close(dir_fd);
+    }
+ 
+    *id_out = id;
+    return 0;
+}
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
     // TODO: Implement
